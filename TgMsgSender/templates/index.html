@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Scheduler</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+<!-- Auth Section -->
+<div id="authSection" class="auth-card">
+    <h1><i class="fab fa-telegram"></i> Telegram Scheduler</h1>
+    <p class="subtitle">Schedule repeating messages with media to your Telegram chats</p>
+    <div id="alertBox"></div>
+
+    <!-- Simplified Login View (Hidden by default, shown via JS if preference is set) -->
+    <div id="simplifiedLoginSection" class="hidden">
+        <div class="form-group">
+            <label>Phone Number</label>
+            <input type="tel" id="phoneInputSimple" placeholder="+1234567890">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="startAuth()">
+            <i class="fas fa-paper-plane"></i> Send Code
+        </button>
+    </div>
+
+    <!-- Full Login View (Visible by default) -->
+    <div id="fullLoginSection">
+        <div class="form-group">
+            <label>API ID</label>
+            <input type="text" id="apiIdInput" placeholder="Enter your API ID">
+        </div>
+        <div class="form-group">
+            <label>API Hash</label>
+            <input type="text" id="apiHashInput" placeholder="Enter your API Hash">
+        </div>
+        <div class="form-group">
+            <label>Phone Number</label>
+            <input type="tel" id="phoneInputFull" placeholder="+1234567890">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="startAuth()">
+            <i class="fas fa-paper-plane"></i> Send Code
+        </button>
+    </div>
+
+    <!-- Verification Code Section -->
+    <div id="codeSection" class="hidden" style="margin-top:20px;">
+        <div class="form-group">
+            <label>Verification Code</label>
+            <input type="text" id="codeInput" placeholder="Enter code from Telegram">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="verifyCode()">
+            <i class="fas fa-check"></i> Verify
+        </button>
+    </div>
+
+    <!-- 2FA Section -->
+    <div id="2faSection" class="hidden" style="margin-top:20px;">
+        <div class="form-group">
+            <label>2FA Password</label>
+            <input type="password" id="passwordInput" placeholder="Enter your 2FA password">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="verify2FA()">
+            <i class="fas fa-unlock"></i> Submit
+        </button>
+    </div>
+</div>
+
+<!-- App Section -->
+<div id="appSection" class="hidden">
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <i class="fab fa-telegram"></i>
+                <span>Telegram Scheduler</span>
+            </div>
+            <div class="user-badge">
+                <div class="user-avatar" id="userAvatar"></div>
+                <div>
+                    <div id="userName" style="font-weight:600;"></div>
+                    <div style="font-size:12px;color:var(--text-secondary);" id="userTimezone"></div>
+                </div>
+                <button class="btn-logout" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="nav-container">
+            <button class="nav-tab active" onclick="switchTab('dashboard')">
+                <i class="fas fa-chart-line"></i> Dashboard
+            </button>
+            <button class="nav-tab" onclick="switchTab('schedule')">
+                <i class="fas fa-plus-circle"></i> New Task
+            </button>
+            <button class="nav-tab" onclick="switchTab('tasks')">
+                <i class="fas fa-list"></i> Tasks
+            </button>
+            <button class="nav-tab" onclick="switchTab('settings')">
+                <i class="fas fa-cog"></i> Settings
+            </button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboardTab" class="tab-content active">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-chart-bar"></i> Statistics</h2>
+                </div>
+                <div class="stats-grid" id="statsGrid">
+                    <div class="loader"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Tab -->
+        <div id="scheduleTab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-calendar-plus"></i> Create Repeating Task</h2>
+                </div>
+                <div class="form-group">
+                    <label>Task Name (Optional)</label>
+                    <input type="text" id="taskName" placeholder="e.g., Daily Reminder">
+                </div>
+                <div class="form-group">
+                    <label>Select Chats</label>
+                    <div class="chat-selector" id="chatSelector"></div>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshChats()" style="margin-top:10px;"><i
+                            class="fas fa-sync"></i> Refresh Chats
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label>Message</label>
+                    <textarea id="messageInput" placeholder="Enter your message here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Repeat Every</label>
+                    <div style="display:flex;gap:10px;">
+                        <input type="number" id="intervalValue" min="1" placeholder="Value" style="flex:1;">
+                        <select id="intervalUnit" style="flex:1;">
+                            <option value="minutes">Minutes</option>
+                            <option value="hours" selected>Hours</option>
+                            <option value="days">Days</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Attach Files</label>
+                    <label for="fileInput" class="file-upload-area">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <div style="color:var(--text-secondary);">Click to select images/videos (max 10)</div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Drag images to reorder</div>
+                    </label>
+                    <input type="file" id="fileInput" multiple accept="image/*,video/*">
+                    <div id="imagePreviewGrid" class="image-preview-grid"></div>
+                </div>
+                <button class="btn btn-success btn-block" onclick="submitForm()"><i class="fas fa-paper-plane"></i>
+                    Create Task
+                </button>
+            </div>
+        </div>
+
+        <!-- Tasks Tab -->
+        <div id="tasksTab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-tasks"></i> Your Tasks</h2>
+                    <button class="btn btn-secondary btn-sm" id="toggleArchivedBtn" onclick="toggleArchivedView()"><i
+                            class="fas fa-archive"></i> Show Archived
+                    </button>
+                </div>
+                <div id="tasksList" class="task-list">
+                    <div class="loader"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settingsTab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-cog"></i> Settings</h2>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h3>Task Notifications</h3>
+                        <p>Get notified via bot when tasks execute</p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="notificationsToggle" onchange="toggleNotifications()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h3>Simplified Login</h3>
+                        <p>Allow logging in with only your phone number after the first time.</p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="simplifiedLoginToggle" onchange="toggleSimplifiedLogin()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Task Modal -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title"><i class="fas fa-edit"></i> Edit Task</h2>
+            <button class="btn-close" onclick="closeEditModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <input type="hidden" id="editTaskId">
+        <div class="form-group">
+            <label>Task Name (Optional)</label>
+            <input type="text" id="editTaskName" placeholder="e.g., Daily Reminder">
+        </div>
+        <div class="form-group">
+            <label>Select Chats</label>
+            <div class="chat-selector" id="editChatSelector"></div>
+        </div>
+        <div class="form-group">
+            <label>Message</label>
+            <textarea id="editMessageInput" placeholder="Enter your message here..."></textarea>
+        </div>
+        <div class="form-group">
+            <label>Repeat Every</label>
+            <div style="display:flex;gap:10px;">
+                <input type="number" id="editIntervalValue" min="1" placeholder="Value" style="flex:1;">
+                <select id="editIntervalUnit" style="flex:1;">
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                    <option value="days">Days</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Attach Files</label>
+            <label for="editFileInput" class="file-upload-area">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <div style="color:var(--text-secondary);">Click to add new images/videos (max 10 total)</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Drag images to reorder</div>
+            </label>
+            <input type="file" id="editFileInput" multiple accept="image/*,video/*">
+            <div id="editImagePreviewGrid" class="image-preview-grid"></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+            <button class="btn btn-success" style="flex:1;" onclick="updateTask()"><i class="fas fa-save"></i> Save
+                Changes
+            </button>
+            <button class="btn btn-secondary" onclick="closeEditModal()"><i class="fas fa-times"></i> Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
