@@ -1,13 +1,11 @@
-"""
-Database Models using SQLAlchemy
-"""
-
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, ForeignKey, JSON
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship
-from datetime import datetime
 import os
+from datetime import datetime
 
-# Updated way to declare the base for modern SQLAlchemy
+from sqlalchemy import (create_engine, Column, Integer, String, Boolean,
+                        DateTime, Text, ForeignKey, JSON)
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+
+# Use declarative_base for modern SQLAlchemy
 Base = declarative_base()
 
 # Database setup
@@ -17,6 +15,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db():
+    """Dependency for getting a DB session."""
     db = SessionLocal()
     try:
         yield db
@@ -29,20 +28,20 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(Integer, unique=True, index=True, nullable=False)
-    phone = Column(String(50), unique=True, index=True)  # Phone should be unique for simplified login
+    phone = Column(String(50), unique=True, index=True)
     first_name = Column(String(255))
-    username = Column(String(255))
+    username = Column(String(255), nullable=True)
     api_id_encrypted = Column(Text, nullable=False)
     api_hash_encrypted = Column(Text, nullable=False)
-    session_string_encrypted = Column(Text)
+    session_string_encrypted = Column(Text, nullable=True)
     is_bot_authorized = Column(Boolean, default=False)
     notifications_enabled = Column(Boolean, default=True)
-    # --- FIX: Added setting for Simplified Login ---
     simplified_login_enabled = Column(Boolean, default=False)
-    # --- End of FIX ---
+    is_admin = Column(Boolean, default=False)
+    language = Column(String(5), default='en', nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_login = Column(DateTime)
+    last_login = Column(DateTime, nullable=True)
 
     tasks = relationship("Task", back_populates="user", cascade="all, delete-orphan")
     chats = relationship("UserChat", back_populates="user", cascade="all, delete-orphan")
@@ -54,28 +53,21 @@ class Task(Base):
     id = Column(String(32), primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     name = Column(String(255), nullable=True)
-    message = Column(Text, nullable=False)
-    schedule_type = Column(String(20), default='repeat')
+    message = Column(Text, nullable=True)
+    schedule_type = Column(String(20), default='repeat', nullable=False)
 
-    schedule_time = Column(DateTime)
-    interval_value = Column(Integer)
-    interval_unit = Column(String(20))
+    schedule_time = Column(DateTime, nullable=True)
+    interval_value = Column(Integer, nullable=True)
+    interval_unit = Column(String(20), nullable=True)
 
-    status = Column(String(20), default='scheduled')
+    status = Column(String(20), default='scheduled', nullable=False, index=True)
     is_running = Column(Boolean, default=False, nullable=False)
     execution_count = Column(Integer, default=0)
-    success_count = Column(Integer, default=0)
-    failure_count = Column(Integer, default=0)
-    last_run = Column(DateTime)
-    last_status = Column(String(20))
-    next_run = Column(DateTime)
-    sent_at = Column(DateTime)
+    last_run = Column(DateTime, nullable=True)
+    next_run = Column(DateTime, nullable=True, index=True)
 
-    file_paths = Column(JSON)
+    file_paths = Column(JSON, nullable=True)
     chat_ids = Column(JSON, nullable=False)
-    failed_chat_ids = Column(JSON)
-
-    send_delay_seconds = Column(Integer, default=2)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -87,13 +79,12 @@ class UserChat(Base):
     __tablename__ = 'user_chats'
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    chat_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    chat_id = Column(Integer, nullable=False, index=True)
     chat_name = Column(String(255))
     chat_type = Column(String(50))
-    can_send = Column(Boolean, default=True)
     is_active = Column(Boolean, default=True)
-    last_checked = Column(DateTime, default=datetime.utcnow)
+    last_checked = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -104,15 +95,13 @@ class TaskExecution(Base):
     __tablename__ = 'task_executions'
 
     id = Column(Integer, primary_key=True)
-    task_id = Column(String(32), ForeignKey('tasks.id'), nullable=False)
+    task_id = Column(String(32), ForeignKey('tasks.id'), nullable=False, index=True)
     execution_time = Column(DateTime, default=datetime.utcnow)
-    status = Column(String(20))
+    status = Column(String(20))  # e.g., 'success', 'partial_failure', 'total_failure'
     total_chats = Column(Integer)
     successful_chats = Column(Integer)
     failed_chats = Column(Integer)
-    error_message = Column(Text)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
+    error_message = Column(Text, nullable=True)
 
 
 def init_db():

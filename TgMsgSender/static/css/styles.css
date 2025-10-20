@@ -62,7 +62,7 @@ body {
     display: flex;
     align-items: center;
     gap: 15px;
-    padding: 10px 20px;
+    padding: 8px 15px;
     background: var(--bg-card);
     border-radius: 50px;
     border: 1px solid var(--border);
@@ -85,22 +85,6 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-}
-
-.btn-logout {
-    background: transparent;
-    color: var(--danger);
-    border: 1px solid var(--danger);
-    padding: 8px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.3s;
-}
-
-.btn-logout:hover {
-    background: var(--danger);
-    color: white;
 }
 
 /* Auth Card */
@@ -904,6 +888,169 @@ input:checked+.toggle-slider:before {
     display: none !important;
 }
 
+/* Admin Panel Styles */
+.user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.user-list-item {
+    background: var(--bg-secondary);
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.user-list-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+.user-info strong {
+    font-size: 15px;
+}
+.user-info span {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+.admin-badge {
+    background: var(--warning);
+    color: white;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    margin-left: 8px;
+    text-transform: uppercase;
+}
+.user-meta {
+    display: flex;
+    gap: 20px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* Language Switcher Styles */
+.lang-switcher {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    margin-right: 15px;
+}
+.lang-switcher button {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-weight: 700;
+    width: 40px;
+    height: 30px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.lang-switcher button:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+.lang-switcher button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+/* Account Dropdown Styles */
+.user-badge-clickable {
+    cursor: pointer;
+    position: relative;
+}
+.account-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 280px;
+    box-shadow: 0 10px 30px var(--shadow);
+    z-index: 100;
+    overflow: hidden;
+    animation: fadeIn 0.2s;
+}
+.account-dropdown.active {
+    display: block;
+}
+.user-badge-clickable.active .fa-chevron-down {
+    transform: rotate(180deg);
+}
+.account-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    transition: background 0.2s;
+    cursor: pointer;
+}
+.account-item:hover {
+    background: var(--bg-hover);
+}
+.account-item .user-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+}
+.account-item-info strong {
+    display: block;
+    color: var(--text-primary);
+}
+.account-item-info span {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.account-item .active-indicator {
+    margin-left: auto;
+    color: var(--success);
+    font-size: 18px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.account-item.current .active-indicator {
+    opacity: 1;
+}
+.dropdown-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+.dropdown-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 12px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+}
+.dropdown-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.dropdown-btn.add-account {
+    color: var(--accent);
+}
+.dropdown-btn.logout {
+    color: var(--danger);
+}
+
+
 /* Responsive */
 @media (max-width: 768px) {
     .container {
@@ -913,6 +1060,7 @@ input:checked+.toggle-slider:before {
     .header {
         flex-direction: column;
         gap: 15px;
+        align-items: flex-end; /* Align to the right */
     }
 
     .nav-container {
@@ -936,27 +1084,27 @@ input:checked+.toggle-slider:before {
     .image-preview-grid {
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     }
+}
 
-    /* Add these new rules at the end of your CSS file */
+/* New Styles for Immediate Send Checkbox */
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    background-color: var(--bg-secondary);
+    padding: 12px;
+    border-radius: 12px;
+}
 
-    .auth-toggle-link {
-        display: block;
-        text-align: center;
-        font-size: 13px;
-        color: var(--text-secondary);
-        text-decoration: none;
-        margin-top: -10px;
-        margin-bottom: 15px;
-        transition: color 0.3s;
-    }
+.form-check-input {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
 
-    .auth-toggle-link:hover {
-        color: var(--accent);
-        text-decoration: underline;
-    }
-
-    /* This is the existing rule, just make sure it's present */
-    .hidden {
-        display: none !important;
-    }
+.form-check-label {
+    margin-bottom: 0;
+    font-weight: 500;
+    cursor: pointer;
 }
