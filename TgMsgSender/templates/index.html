@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Scheduler</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+<!-- Auth Section -->
+<div id="authSection" class="auth-card">
+    <h1><i class="fab fa-telegram"></i> Telegram Scheduler</h1>
+    <p class="subtitle" data-i18n="auth_subtitle">Schedule repeating messages with media to your Telegram chats</p>
+    <div id="alertBox"></div>
+
+    <!-- Simplified Login View -->
+    <div id="simplifiedLoginSection" class="hidden">
+        <div class="form-group">
+            <label data-i18n="phone_label">Phone Number</label>
+            <input type="tel" id="phoneInputSimple" placeholder="+1234567890">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="startAuth()">
+            <i class="fas fa-paper-plane"></i> <span data-i18n="send_code_btn">Send Code</span>
+        </button>
+    </div>
+
+    <!-- Full Login View -->
+    <div id="fullLoginSection">
+        <div class="form-group">
+            <label data-i18n="api_id_label">API ID</label>
+            <input type="text" id="apiIdInput" data-i18n-placeholder="api_id_placeholder">
+        </div>
+        <div class="form-group">
+            <label data-i18n="api_hash_label">API Hash</label>
+            <input type="text" id="apiHashInput" data-i18n-placeholder="api_hash_placeholder">
+        </div>
+        <div class="form-group">
+            <label data-i18n="phone_label">Phone Number</label>
+            <input type="tel" id="phoneInputFull" placeholder="+1234567890">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="startAuth()">
+            <i class="fas fa-paper-plane"></i> <span data-i18n="send_code_btn">Send Code</span>
+        </button>
+    </div>
+
+    <!-- Verification Code Section -->
+    <div id="codeSection" class="hidden" style="margin-top:20px;">
+        <div class="form-group">
+            <label data-i18n="verify_code_label">Verification Code</label>
+            <input type="text" id="codeInput" data-i18n-placeholder="verify_code_placeholder">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="verifyCode()">
+            <i class="fas fa-check"></i> <span data-i18n="verify_btn">Verify</span>
+        </button>
+    </div>
+
+    <!-- 2FA Section -->
+    <div id="2faSection" class="hidden" style="margin-top:20px;">
+        <div class="form-group">
+            <label data-i18n="password_label">2FA Password</label>
+            <input type="password" id="passwordInput" data-i18n-placeholder="password_placeholder">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="verify2FA()">
+            <i class="fas fa-unlock"></i> <span data-i18n="submit_btn">Submit</span>
+        </button>
+    </div>
+
+    <div class="form-group" style="margin-top: 20px;">
+        <button id="cancelAddAccountBtn" class="btn btn-secondary btn-block hidden" onclick="cancelAddAccount()">
+            <i class="fas fa-arrow-left"></i> <span data-i18n="back_to_app_btn">Back to App</span>
+        </button>
+    </div>
+</div>
+
+<!-- App Section -->
+<div id="appSection" class="hidden">
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <i class="fab fa-telegram"></i>
+                <span>Telegram Scheduler</span>
+            </div>
+            <div class="user-badge-clickable" id="userBadgeClickable">
+                <div class="user-badge" id="userBadge">
+                    <div class="lang-switcher">
+                        <button id="lang-en" onclick="setLanguage('en')">EN</button>
+                        <button id="lang-ru" onclick="setLanguage('ru')">RU</button>
+                    </div>
+                    <div class="user-avatar" id="userAvatar"></div>
+                    <div>
+                        <div id="userName" style="font-weight:600;"></div>
+                        <div style="font-size:12px;color:var(--text-secondary);" id="userTimezone"></div>
+                    </div>
+                    <i class="fas fa-chevron-down" style="margin-left: 5px; transition: transform 0.2s;"></i>
+                </div>
+                <div class="account-dropdown" id="accountDropdown">
+                    <!-- Account list will be populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <div class="nav-container">
+            <button class="nav-tab active" onclick="switchTab('dashboard')">
+                <i class="fas fa-chart-line"></i> <span data-i18n="dashboard_tab">Dashboard</span>
+            </button>
+            <button class="nav-tab" onclick="switchTab('schedule')">
+                <i class="fas fa-plus-circle"></i> <span data-i18n="new_task_tab">New Task</span>
+            </button>
+            <button class="nav-tab" onclick="switchTab('tasks')">
+                <i class="fas fa-list"></i> <span data-i18n="tasks_tab">Tasks</span>
+            </button>
+            <button class="nav-tab" onclick="switchTab('settings')">
+                <i class="fas fa-cog"></i> <span data-i18n="settings_tab">Settings</span>
+            </button>
+            <button id="adminNavTab" class="nav-tab hidden" onclick="switchTab('admin')">
+                <i class="fas fa-user-shield"></i> <span data-i18n="admin_tab">Admin</span>
+            </button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboardTab" class="tab-content active">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-chart-bar"></i> <span
+                            data-i18n="stats_title">Statistics</span></h2>
+                </div>
+                <div class="stats-grid" id="statsGrid">
+                    <div class="loader"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Tab -->
+        <div id="scheduleTab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-calendar-plus"></i> <span data-i18n="create_task_title">Create Repeating Task</span>
+                    </h2>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="task_name_label">Task Name (Optional)</label>
+                    <input type="text" id="taskName" data-i18n-placeholder="task_name_placeholder">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="select_chats_label">Select Chats</label>
+                    <div class="chat-selector" id="chatSelector"></div>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshChats()" style="margin-top:10px;"><i
+                            class="fas fa-sync"></i> <span data-i18n="refresh_chats_btn">Refresh Chats</span>
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="message_label">Message</label>
+
+                    <textarea id="messageInput" data-i18n-placeholder="message_placeholder"></textarea>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="repeat_every_label">Repeat Every</label>
+                    <div style="display:flex;gap:10px;">
+                        <input type="number" id="intervalValue" min="1" data-i18n-placeholder="value_placeholder"
+                               style="flex:1;">
+                        <select id="intervalUnit" style="flex:1;">
+                            <option value="minutes" data-i18n="minutes">Minutes</option>
+                            <option value="hours" selected data-i18n="hours">Hours</option>
+                            <option value="days" data-i18n="days">Days</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="attach_files_label">Attach Files</label>
+                    <label for="fileInput" class="file-upload-area">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <div style="color:var(--text-secondary);" data-i18n="file_upload_prompt">Click to select
+                            images/videos (max 10)
+                        </div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;" data-i18n="file_upload_dnd">
+                            Drag images to reorder
+                        </div>
+                    </label>
+                    <input type="file" id="fileInput" multiple accept="image/*,video/*">
+                    <div id="imagePreviewGrid" class="image-preview-grid"></div>
+                </div>
+
+                <!-- START: New Checkbox for Immediate Send -->
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="sendImmediatelyCheckbox">
+                    <label class="form-check-label" for="sendImmediatelyCheckbox" data-i18n="send_immediately_label">
+                        Send immediately, then start schedule
+                    </label>
+                </div>
+                <!-- END: New Checkbox for Immediate Send -->
+
+                <button class="btn btn-success btn-block" onclick="submitForm()"><i class="fas fa-paper-plane"></i>
+                    <span data-i18n="create_task_btn">Create Task</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tasks Tab -->
+        <div id="tasksTab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-tasks"></i> <span
+                            data-i18n="your_tasks_title">Your Tasks</span></h2>
+                    <button class="btn btn-secondary btn-sm" id="toggleArchivedBtn" onclick="toggleArchivedView()"><i
+                            class="fas fa-archive"></i> <span data-i18n="show_archived_btn">Show Archived</span>
+                    </button>
+                </div>
+                <div id="tasksList" class="task-list">
+                    <div class="loader"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settingsTab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-cog"></i> <span data-i18n="settings_title">Settings</span>
+                    </h2>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h3 data-i18n="notifications_label">Task Notifications</h3>
+                        <p data-i18n="notifications_desc">Get notified via bot when tasks execute</p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="notificationsToggle" onchange="toggleNotifications()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h3 data-i18n="simplified_login_label">Simplified Login</h3>
+                        <p data-i18n="simplified_login_desc">Allow logging in with only your phone number after the
+                            first time.</p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="simplifiedLoginToggle" onchange="toggleSimplifiedLogin()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Tab -->
+        <div id="adminTab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-tachometer-alt"></i> <span
+                            data-i18n="admin_dashboard_title">Admin Dashboard</span></h2>
+                </div>
+                <div class="stats-grid" id="adminStatsGrid">
+                    <div class="loader"></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-users-cog"></i> <span data-i18n="user_management_title">User Management</span>
+                    </h2>
+                </div>
+                <div id="adminUserList" class="user-list">
+                    <div class="loader"></div>
+                </div>
+            </div>
+            <div class="card" id="adminUserTasksCard" class="hidden" style="display: none;">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-tasks"></i> <span
+                            data-i18n="tasks_for_user_title">Tasks for</span> <span id="adminTasksForUser"></span></h2>
+                </div>
+                <div id="adminUserTasksList" class="task-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Task Modal -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title"><i class="fas fa-edit"></i> <span data-i18n="edit_task_title">Edit Task</span></h2>
+            <button class="btn-close" onclick="closeEditModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <input type="hidden" id="editTaskId">
+        <div class="form-group">
+            <label data-i18n="task_name_label">Task Name (Optional)</label>
+            <input type="text" id="editTaskName" data-i18n-placeholder="task_name_placeholder">
+        </div>
+        <div class="form-group">
+            <label data-i18n="select_chats_label">Select Chats</label>
+            <div class="chat-selector" id="editChatSelector"></div>
+        </div>
+        <div class="form-group">
+            <label data-i18n="message_label">Message</label>
+            <textarea id="editMessageInput" data-i18n-placeholder="message_placeholder"></textarea>
+        </div>
+        <div class="form-group">
+            <label data-i18n="repeat_every_label">Repeat Every</label>
+            <div style="display:flex;gap:10px;">
+                <input type="number" id="editIntervalValue" min="1" data-i18n-placeholder="value_placeholder"
+                       style="flex:1;">
+                <select id="editIntervalUnit" style="flex:1;">
+                    <option value="minutes" data-i18n="minutes">Minutes</option>
+                    <option value="hours" data-i18n="hours">Hours</option>
+                    <option value="days" data-i18n="days">Days</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label data-i18n="attach_files_label">Attach Files</label>
+            <label for="editFileInput" class="file-upload-area">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <div style="color:var(--text-secondary);" data-i18n="file_upload_add_prompt">Click to add new
+                    images/videos (max 10 total)
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:4px;" data-i18n="file_upload_dnd">Drag
+                    images to reorder
+                </div>
+            </label>
+            <input type="file" id="editFileInput" multiple accept="image/*,video/*">
+            <div id="editImagePreviewGrid" class="image-preview-grid"></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+            <button class="btn btn-success" style="flex:1;" onclick="updateTask()"><i class="fas fa-save"></i>
+                <span data-i18n="save_changes_btn">Save Changes</span>
+            </button>
+            <button class="btn btn-secondary" onclick="closeEditModal()"><i class="fas fa-times"></i> <span
+                    data-i18n="cancel_btn">Cancel</span></button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/translations.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
