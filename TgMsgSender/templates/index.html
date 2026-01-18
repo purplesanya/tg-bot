@@ -155,18 +155,41 @@
 
                     <textarea id="messageInput" data-i18n-placeholder="message_placeholder"></textarea>
                 </div>
+
+                <!-- NEW COMPOSITE TIME INPUT -->
+                     <!-- NEW COMPOSITE TIME INPUT -->
                 <div class="form-group">
                     <label data-i18n="repeat_every_label">Repeat Every</label>
-                    <div style="display:flex;gap:10px;">
-                        <input type="number" id="intervalValue" min="1" data-i18n-placeholder="value_placeholder"
-                               style="flex:1;">
-                        <select id="intervalUnit" style="flex:1;">
-                            <option value="minutes" data-i18n="minutes">Minutes</option>
-                            <option value="hours" selected data-i18n="hours">Hours</option>
-                            <option value="days" data-i18n="days">Days</option>
-                        </select>
+
+                    <!-- Container -->
+                    <div class="time-selection-row">
+
+                        <!-- Dropdown Column -->
+                        <div class="time-col">
+                            <select id="intervalUnit" onchange="updateIntervalLabels()">
+                                <option value="minutes" data-i18n="minutes">Minutes</option>
+                                <option value="hours" selected data-i18n="hours">Hours</option>
+                                <option value="days" data-i18n="days">Days</option>
+                            </select>
+                        </div>
+
+                        <!-- Composite Input Column (Both inputs side by side) -->
+                        <div class="time-col time-input-composite">
+                            <div class="input-group">
+                                <input type="number" id="intervalValue" min="0" placeholder="0">
+                                <div class="input-group-text" id="primaryLabel">Hours</div>
+                            </div>
+
+                            <div class="input-group">
+                                <input type="number" id="intervalValueSecondary" min="0" placeholder="0">
+                                <div class="input-group-text" id="secondaryLabel">Minutes</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+                <!-- END NEW INPUT -->
+                <!-- END NEW INPUT -->
+
                 <div class="form-group">
                     <label data-i18n="attach_files_label">Attach Files</label>
                     <label for="fileInput" class="file-upload-area">
@@ -182,14 +205,12 @@
                     <div id="imagePreviewGrid" class="image-preview-grid"></div>
                 </div>
 
-                <!-- START: New Checkbox for Immediate Send -->
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="sendImmediatelyCheckbox">
                     <label class="form-check-label" for="sendImmediatelyCheckbox" data-i18n="send_immediately_label">
                         Send immediately, then start schedule
                     </label>
                 </div>
-                <!-- END: New Checkbox for Immediate Send -->
 
                 <button class="btn btn-success btn-block" onclick="submitForm()"><i class="fas fa-paper-plane"></i>
                     <span data-i18n="create_task_btn">Create Task</span>
@@ -295,18 +316,40 @@
             <label data-i18n="message_label">Message</label>
             <textarea id="editMessageInput" data-i18n-placeholder="message_placeholder"></textarea>
         </div>
+
+        <!-- NEW EDIT COMPOSITE TIME INPUT -->
         <div class="form-group">
             <label data-i18n="repeat_every_label">Repeat Every</label>
-            <div style="display:flex;gap:10px;">
-                <input type="number" id="editIntervalValue" min="1" data-i18n-placeholder="value_placeholder"
-                       style="flex:1;">
-                <select id="editIntervalUnit" style="flex:1;">
-                    <option value="minutes" data-i18n="minutes">Minutes</option>
-                    <option value="hours" data-i18n="hours">Hours</option>
-                    <option value="days" data-i18n="days">Days</option>
-                </select>
+
+            <div class="time-selection-row">
+                <!-- Dropdown -->
+                <div class="time-col">
+                    <select id="editIntervalUnit" onchange="updateEditIntervalLabels()">
+                        <option value="minutes" data-i18n="minutes">Minutes</option>
+                        <option value="hours" data-i18n="hours">Hours</option>
+                        <option value="days" data-i18n="days">Days</option>
+                    </select>
+                </div>
+
+                <!-- Input 1 -->
+                <div class="time-col">
+                    <div class="input-group">
+                        <input type="number" id="editIntervalValue" min="0" placeholder="0">
+                        <div class="input-group-text" id="editPrimaryLabel">Hours</div>
+                    </div>
+                </div>
+
+                <!-- Input 2 -->
+                <div class="time-col">
+                    <div class="input-group">
+                        <input type="number" id="editIntervalValueSecondary" min="0" placeholder="0">
+                        <div class="input-group-text" id="editSecondaryLabel">Minutes</div>
+                    </div>
+                </div>
             </div>
         </div>
+        <!-- END NEW INPUT -->
+
         <div class="form-group">
             <label data-i18n="attach_files_label">Attach Files</label>
             <label for="editFileInput" class="file-upload-area">
