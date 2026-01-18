@@ -32,7 +32,6 @@ const translations = {
         "archived_tasks": "Archived",
         "total_executions": "Executions",
 
-
         // Forms
         "task_name_label": "Task Name (Optional)",
         "task_name_placeholder": "e.g., Daily Reminder",
@@ -45,6 +44,7 @@ const translations = {
         "minutes": "Minutes",
         "hours": "Hours",
         "days": "Days",
+        "seconds": "Seconds",  // <-- ADDED THIS
         "attach_files_label": "Attach Files",
         "file_upload_prompt": "Click to select images/videos (max 10)",
         "file_upload_dnd": "Drag images to reorder",
@@ -124,13 +124,14 @@ const translations = {
         "simplified_login_enabled": "Simplified Login enabled",
         "simplified_login_disabled": "Simplified Login disabled",
         "session_expired_relogin": "Session expired, please log in again.",
-
+        "search_chats": "Search chats...",
         // New Account Dropdown
         "add_account_btn": "Add Account",
         "logout_btn": "Logout",
         "back_to_app_btn": "Back to App"
     },
     'ru': {
+        "search_chats": "Поиск чатов...",
         "auth_subtitle": "Планируйте повторяющиеся сообщения с медиа в ваши чаты Telegram",
         "phone_label": "Номер телефона",
         "send_code_btn": "Отправить код",
@@ -171,11 +172,12 @@ const translations = {
         "minutes": "Минуты",
         "hours": "Часы",
         "days": "Дни",
+        "seconds": "Секунды", // <-- ADDED THIS
         "attach_files_label": "Прикрепить файлы",
         "file_upload_prompt": "Нажмите, чтобы выбрать изображения/видео (макс. 10)",
         "file_upload_dnd": "Перетаскивайте для изменения порядка",
         "create_task_btn": "Создать задачу",
-         "send_immediately_label": "Отправить немедленно, затем запустить расписание",
+        "send_immediately_label": "Отправить немедленно, затем запустить расписание",
 
         "show_archived_btn": "Показать архив",
         "show_active_btn": "Показать активные",

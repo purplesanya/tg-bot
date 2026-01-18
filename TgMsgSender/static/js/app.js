@@ -11,6 +11,48 @@ let showingArchived = false;
 let currentUser = {};
 let isLoggingOut = false;
 
+// --- New Helper Functions for Time ---
+const updateIntervalLabels = () => {
+    const unit = document.getElementById('intervalUnit').value;
+    const pLabel = document.getElementById('primaryLabel');
+    const sLabel = document.getElementById('secondaryLabel');
+
+    if (unit === 'minutes') { pLabel.innerText = getText('minutes'); sLabel.innerText = getText('seconds'); }
+    else if (unit === 'hours') { pLabel.innerText = getText('hours'); sLabel.innerText = getText('minutes'); }
+    else if (unit === 'days') { pLabel.innerText = getText('days'); sLabel.innerText = getText('hours'); }
+};
+
+const updateEditIntervalLabels = () => {
+    const unit = document.getElementById('editIntervalUnit').value;
+    const pLabel = document.getElementById('editPrimaryLabel');
+    const sLabel = document.getElementById('editSecondaryLabel');
+
+    if (unit === 'minutes') { pLabel.innerText = getText('minutes'); sLabel.innerText = getText('seconds'); }
+    else if (unit === 'hours') { pLabel.innerText = getText('hours'); sLabel.innerText = getText('minutes'); }
+    else if (unit === 'days') { pLabel.innerText = getText('days'); sLabel.innerText = getText('hours'); }
+};
+
+const parseSecondsToComposite = (totalSeconds) => {
+    if (totalSeconds >= 86400) { // Days
+        return { unit: 'days', primary: Math.floor(totalSeconds / 86400), secondary: Math.floor((totalSeconds % 86400) / 3600) };
+    } else if (totalSeconds >= 3600) { // Hours
+        return { unit: 'hours', primary: Math.floor(totalSeconds / 3600), secondary: Math.floor((totalSeconds % 3600) / 60) };
+    } else { // Minutes
+        return { unit: 'minutes', primary: Math.floor(totalSeconds / 60), secondary: totalSeconds % 60 };
+    }
+};
+
+const formatCompositeDuration = (val, unit) => {
+    if (unit !== 'seconds') return `${val} ${getText(unit)}`;
+    const comp = parseSecondsToComposite(val);
+    let text = `${comp.primary} ${getText(comp.unit)}`;
+    if (comp.secondary > 0) {
+        let secUnitKey = comp.unit === 'days' ? 'hours' : (comp.unit === 'hours' ? 'minutes' : 'seconds');
+        text += ` ${comp.secondary} ${getText(secUnitKey)}`;
+    }
+    return text;
+};
+
 // --- Account Management ---
 const accountManager = {
     getAccounts: () => {
@@ -67,6 +109,10 @@ const setLanguage = (lang) => {
 
     document.getElementById('lang-en').classList.toggle('active', lang === 'en');
     document.getElementById('lang-ru').classList.toggle('active', lang === 'ru');
+
+    // Update time labels when language changes
+    if (document.getElementById('intervalUnit')) updateIntervalLabels();
+    if (document.getElementById('editIntervalUnit')) updateEditIntervalLabels();
 
     const activeTab = document.querySelector('.tab-content.active');
     if (activeTab && window.appSection && !window.appSection.classList.contains('hidden')) {
@@ -154,12 +200,6 @@ const formatNextRun = (isoString) => {
     if (diff < 3600) return `${langPrefix} ${Math.floor(diff / 60)}m`;
     if (diff < 86400) return `${langPrefix} ${Math.floor(diff / 3600)}h`;
     return `${langPrefix} ${Math.floor(diff / 86400)}d`;
-};
-
-const formatLocaleDateTime = (isoString) => {
-    if (!isoString) return '';
-    const date = new Date(isoString);
-    return date.toLocaleString(currentLang, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: false });
 };
 
 const switchTab = (tab) => {
@@ -386,9 +426,46 @@ const loadChats = async (selectIds = []) => {
 };
 
 const renderChatSelector = (container, selected, isEdit) => {
-    container.innerHTML = allChats.map(c => `<div class="chat-item ${selected.includes(c.id) ? 'selected' : ''}" onclick="toggleChat(${c.id}, ${isEdit})"><div class="chat-checkbox"><i class="fas fa-check"></i></div><div class="chat-info"><div class="chat-name">${c.name}</div><div class="chat-type">${c.type}</div></div></div>`).join('');
+    // Generate the HTML for items
+    const itemsHtml = allChats.map(c => `
+        <div class="chat-item ${selected.includes(c.id) ? 'selected' : ''}"
+             onclick="toggleChat(${c.id}, ${isEdit})"
+             data-name="${c.name.toLowerCase()}">
+            <div class="chat-checkbox"><i class="fas fa-check"></i></div>
+            <div class="chat-info">
+                <div class="chat-name">${c.name}</div>
+                <div class="chat-type">${c.type}</div>
+            </div>
+        </div>
+    `).join('');
+
+    // Prepend Search Bar
+    const searchHtml = `
+        <div class="chat-selector-header">
+            <input type="text" class="chat-search-input"
+                   placeholder="${getText('search_chats') || 'Search chats...'}"
+                   onkeyup="filterChats(this)">
+        </div>
+    `;
+
+    container.innerHTML = searchHtml + itemsHtml;
 };
 
+// Add this new helper function
+const filterChats = (input) => {
+    const filter = input.value.toLowerCase();
+    const container = input.closest('.chat-selector');
+    const items = container.querySelectorAll('.chat-item');
+
+    items.forEach(item => {
+        const name = item.getAttribute('data-name');
+        if (name.includes(filter)) {
+            item.style.display = "flex";
+        } else {
+            item.style.display = "none";
+        }
+    });
+};
 const toggleChat = (chatId, isEdit) => {
     const list = isEdit ? editSelectedChatIds : selectedChatIds;
     const container = isEdit ? editChatSelector : chatSelector;
@@ -413,7 +490,11 @@ const toggleArchivedView = () => {
 };
 
 const loadTasks = async (showLoader = false) => {
-    if (showLoader) tasksList.innerHTML = '<div class="loader"></div>';
+    if (showLoader) {
+        tasksList.innerHTML = Array(3).fill(0).map(() => `
+            <div class="task-card skeleton-card skeleton"></div>
+        `).join('');
+    }
     const endpoint = showingArchived ? '/api/tasks/archived' : '/api/tasks';
     try {
         const d = await fetchApi(`${endpoint}?timezone=${encodeURIComponent(userTimezone)}`);
@@ -441,14 +522,21 @@ const loadTasks = async (showLoader = false) => {
             }
             const lastRunText = t.last_run ? `${getText('last_run')} ${formatTimeAgo(t.last_run)}` : getText('not_executed_yet');
             const nextRunText = t.next_run && t.status === 'active' ? ` | ${getText('next_run')} ${formatNextRun(t.next_run)}` : '';
-            const intervalUnitText = getText(t.interval_unit) || t.interval_unit;
-            return `<div class="task-card"><div class="task-header"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${t.name ? `<div class="task-name-badge">${t.name}</div>` : ''}<span class="task-status status-${t.status}">${t.status}</span></div><div class="task-actions">${actions}</div></div><div class="task-body"><div class="task-message">${t.message.substring(0, 120)}${t.message.length > 120 ? '...' : ''}</div><div class="task-meta"><div class="task-meta-item"><i class="far fa-clock"></i><span>${getText('every')} ${t.interval_value} ${intervalUnitText}</span></div><div class="task-meta-item"><i class="fas fa-users"></i><span>${t.chat_ids.length} ${getText('chats')}</span></div>${t.files > 0 ? `<div class="task-meta-item"><i class="fas fa-paperclip"></i><span>${t.files} ${getText('files')}</span></div>` : ''}<div class="task-meta-item"><i class="fas fa-repeat"></i><span>${t.execution_count}${getText('executed')}</span></div><div class="task-meta-item"><i class="fas fa-history"></i><span>${lastRunText}${nextRunText}</span></div></div></div></div>`;
+
+            // Format time display
+            const durationText = formatCompositeDuration(t.interval_value, t.interval_unit);
+
+            return `<div class="task-card"><div class="task-header"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${t.name ? `<div class="task-name-badge">${t.name}</div>` : ''}<span class="task-status status-${t.status}">${t.status}</span></div><div class="task-actions">${actions}</div></div><div class="task-body"><div class="task-message">${t.message.substring(0, 120)}${t.message.length > 120 ? '...' : ''}</div><div class="task-meta"><div class="task-meta-item"><i class="far fa-clock"></i><span>${getText('every')} ${durationText}</span></div><div class="task-meta-item"><i class="fas fa-users"></i><span>${t.chat_ids.length} ${getText('chats')}</span></div>${t.files > 0 ? `<div class="task-meta-item"><i class="fas fa-paperclip"></i><span>${t.files} ${getText('files')}</span></div>` : ''}<div class="task-meta-item"><i class="fas fa-repeat"></i><span>${t.execution_count}${getText('executed')}</span></div><div class="task-meta-item"><i class="fas fa-history"></i><span>${lastRunText}${nextRunText}</span></div></div></div></div>`;
         }).join('');
     } catch (e) {}
 };
 
 const loadStats = async (showLoader = false) => {
-    if (showLoader) statsGrid.innerHTML = '<div class="loader"></div>';
+    if (showLoader) {
+        statsGrid.innerHTML = Array(4).fill(0).map(() =>
+        `<div class="stat-card skeleton" style="height: 100px;"></div>`
+        ).join('');
+    }
     try {
         const s = await fetchApi('/api/stats');
         statsGrid.innerHTML = `<div class="stat-card"><div class="stat-value">${s.total_tasks}</div><div class="stat-label">${getText('total_tasks')}</div></div><div class="stat-card"><div class="stat-value">${s.active_tasks}</div><div class="stat-label">${getText('active_tasks')}</div></div><div class="stat-card"><div class="stat-value">${s.archived_tasks}</div><div class="stat-label">${getText('archived_tasks')}</div></div><div class="stat-card"><div class="stat-value">${s.total_executions}</div><div class="stat-label">${getText('total_executions')}</div></div>`;
@@ -481,7 +569,12 @@ const toggleSimplifiedLogin = async () => {
 const submitForm = async () => {
     if (selectedChatIds.length === 0) return showAlert(getText('select_chat_error'), 'error');
     if (!messageInput.value.trim() && selectedFiles.length === 0) return showAlert(getText('message_or_file_error'), 'error');
-    if (!intervalValue.value || intervalValue.value < 1) return showAlert(getText('invalid_interval_error'), 'error');
+
+    // Check if at least one interval input is valid and > 0 (or secondary > 0)
+    // Actually we just need to ensure user didn't leave both empty/zero
+    const val1 = parseInt(intervalValue.value || 0);
+    const val2 = parseInt(intervalValueSecondary.value || 0);
+    if (val1 <= 0 && val2 <= 0) return showAlert(getText('invalid_interval_error'), 'error');
 
     const sendImmediately = document.getElementById('sendImmediatelyCheckbox').checked;
 
@@ -489,8 +582,11 @@ const submitForm = async () => {
     fd.append('chat_ids', selectedChatIds.join(','));
     fd.append('message', messageInput.value);
     fd.append('task_name', taskName.value);
-    fd.append('interval_value', intervalValue.value);
+
+    fd.append('interval_value', val1);
+    fd.append('interval_value_secondary', val2);
     fd.append('interval_unit', intervalUnit.value);
+
     selectedFiles.forEach(f => fd.append('files', f));
     fd.append('final_order', JSON.stringify(selectedFiles.map(f => f.name)));
     fd.append('send_immediately', sendImmediately);
@@ -509,12 +605,14 @@ const resetForm = () => {
     messageInput.value = '';
     taskName.value = '';
     intervalValue.value = '';
+    intervalValueSecondary.value = '';
     document.getElementById('sendImmediatelyCheckbox').checked = false;
     selectedChatIds = [];
     selectedFiles = [];
     renderChatSelector(chatSelector, [], false);
     displayFiles();
     intervalUnit.value = 'hours';
+    updateIntervalLabels();
 };
 
 const openEditModal = async (id) => {
@@ -522,8 +620,21 @@ const openEditModal = async (id) => {
     editTaskId.value = task.id;
     editTaskName.value = task.name || '';
     editMessageInput.value = task.message;
-    editIntervalValue.value = task.interval_value;
-    editIntervalUnit.value = task.interval_unit;
+    autoResize(editMessageInput);
+
+    // Handle Time Parsing
+    if (task.interval_unit === 'seconds') {
+        const comp = parseSecondsToComposite(task.interval_value);
+        editIntervalUnit.value = comp.unit;
+        editIntervalValue.value = comp.primary;
+        editIntervalValueSecondary.value = comp.secondary;
+    } else {
+        editIntervalUnit.value = task.interval_unit;
+        editIntervalValue.value = task.interval_value;
+        editIntervalValueSecondary.value = 0;
+    }
+    updateEditIntervalLabels();
+
     editSelectedChatIds = [...task.chat_ids];
     renderChatSelector(editChatSelector, editSelectedChatIds, true);
     editFilesUnified = (task.file_urls || []).map(url => ({ type: 'existing', data: url }));
@@ -542,8 +653,13 @@ const updateTask = async () => {
     fd.append('chat_ids', editSelectedChatIds.join(','));
     fd.append('message', editMessageInput.value);
     fd.append('task_name', editTaskName.value);
-    fd.append('interval_value', editIntervalValue.value);
+
+    const val1 = parseInt(editIntervalValue.value || 0);
+    const val2 = parseInt(editIntervalValueSecondary.value || 0);
+    fd.append('interval_value', val1);
+    fd.append('interval_value_secondary', val2);
     fd.append('interval_unit', editIntervalUnit.value);
+
     fd.append('keep_existing', JSON.stringify(editFilesUnified.filter(i => i.type === 'existing').map(i => i.data)));
     editFilesUnified.filter(i => i.type === 'new').map(i => i.data).forEach(f => fd.append('files', f));
     fd.append('final_order', JSON.stringify(editFilesUnified.map(item => item.type === 'existing' ? item.data : item.data.name)));
@@ -621,8 +737,9 @@ const loadAdminUserTasks = async (userId, userName) => {
         adminUserTasksList.innerHTML = d.tasks.map(t => {
             const lastRunText = t.last_run ? `${getText('last_run')} ${formatTimeAgo(t.last_run)}` : getText('not_executed_yet');
             const nextRunText = t.next_run && t.status === 'active' ? ` | ${getText('next_run')} ${formatNextRun(t.next_run)}` : '';
-            const intervalUnitText = getText(t.interval_unit) || t.interval_unit;
-            return `<div class="task-card"><div class="task-header"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${t.name ? `<div class="task-name-badge">${t.name}</div>` : ''}<span class="task-status status-${t.status}">${t.status}</span></div></div><div class="task-body"><div class="task-message">${t.message.substring(0, 120)}${t.message.length > 120 ? '...' : ''}</div><div class="task-meta"><div class="task-meta-item"><i class="far fa-clock"></i><span>${getText('every')} ${t.interval_value} ${intervalUnitText}</span></div><div class="task-meta-item"><i class="fas fa-users"></i><span>${t.chat_ids.length} ${getText('chats')}</span></div>${t.files > 0 ? `<div class="task-meta-item"><i class="fas fa-paperclip"></i><span>${t.files} ${getText('files')}</span></div>` : ''}<div class="task-meta-item"><i class="fas fa-repeat"></i><span>${t.execution_count}${getText('executed')}</span></div><div class="task-meta-item"><i class="fas fa-history"></i><span>${lastRunText}${nextRunText}</span></div></div></div></div>`;
+            const durationText = formatCompositeDuration(t.interval_value, t.interval_unit);
+
+            return `<div class="task-card"><div class="task-header"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${t.name ? `<div class="task-name-badge">${t.name}</div>` : ''}<span class="task-status status-${t.status}">${t.status}</span></div></div><div class="task-body"><div class="task-message">${t.message.substring(0, 120)}${t.message.length > 120 ? '...' : ''}</div><div class="task-meta"><div class="task-meta-item"><i class="far fa-clock"></i><span>${getText('every')} ${durationText}</span></div><div class="task-meta-item"><i class="fas fa-users"></i><span>${t.chat_ids.length} ${getText('chats')}</span></div>${t.files > 0 ? `<div class="task-meta-item"><i class="fas fa-paperclip"></i><span>${t.files} ${getText('files')}</span></div>` : ''}<div class="task-meta-item"><i class="fas fa-repeat"></i><span>${t.execution_count}${getText('executed')}</span></div><div class="task-meta-item"><i class="fas fa-history"></i><span>${lastRunText}${nextRunText}</span></div></div></div></div>`;
         }).join('');
     } catch(e) {}
 };
@@ -631,6 +748,9 @@ const loadAdminUserTasks = async (userId, userName) => {
 window.addEventListener('DOMContentLoaded', async () => {
     const savedLang = localStorage.getItem('preferredLanguage');
     setLanguage(savedLang || 'en');
+
+    // Initialize interval labels
+    updateIntervalLabels();
 
     const { activeAccountId, accounts } = accountManager.getAccounts();
 
@@ -678,13 +798,17 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
 
+// Added new input IDs to elements array
 const elements = [
     'phoneInputSimple', 'phoneInputFull', 'apiIdInput', 'apiHashInput', 'codeInput', 'passwordInput', 'twoFaSection',
     'simplifiedLoginSection', 'fullLoginSection', 'codeSection', 'authSection', 'appSection',
     'userName', 'userAvatar', 'statsGrid', 'notificationsToggle', 'simplifiedLoginToggle',
-    'chatSelector', 'editChatSelector', 'messageInput', 'intervalValue', 'intervalUnit',
+    'chatSelector', 'editChatSelector', 'messageInput',
+    'intervalValue', 'intervalValueSecondary', 'intervalUnit', 'primaryLabel', 'secondaryLabel',
     'fileInput', 'imagePreviewGrid', 'tasksList', 'alertBox', 'editModal', 'editTaskId',
-    'editMessageInput', 'editIntervalValue', 'editIntervalUnit', 'editFileInput',
+    'editMessageInput',
+    'editIntervalValue', 'editIntervalValueSecondary', 'editIntervalUnit', 'editPrimaryLabel', 'editSecondaryLabel',
+    'editFileInput',
     'editImagePreviewGrid', 'taskName', 'editTaskName', 'adminNavTab', 'adminTab',
     'adminStatsGrid', 'adminUserList', 'adminUserTasksCard', 'adminTasksForUser', 'adminUserTasksList',
     'userBadgeClickable', 'accountDropdown', 'cancelAddAccountBtn'
@@ -692,5 +816,58 @@ const elements = [
 elements.forEach(id => {
     if (document.getElementById(id)) {
         window[id] = document.getElementById(id);
+    }
+});
+const dropZones = document.querySelectorAll('.file-upload-area');
+
+dropZones.forEach(zone => {
+    ['dragenter', 'dragover'].forEach(eventName => {
+        zone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            zone.classList.add('drag-over');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        zone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            zone.classList.remove('drag-over');
+        }, false);
+    });
+
+    // Handle file drop specifically
+    zone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+
+        // Check which input this label belongs to
+        const inputId = zone.getAttribute('for');
+        if(inputId === 'fileInput') {
+            const newFiles = Array.from(files);
+            if (selectedFiles.length + newFiles.length > 10) { showAlert(getText('max_files_error'), 'error'); return; }
+            selectedFiles.push(...newFiles.slice(0, 10 - selectedFiles.length));
+            displayFiles();
+        } else if(inputId === 'editFileInput') {
+            const newFiles = Array.from(files);
+            if (editFilesUnified.length + newFiles.length > 10) { showAlert(getText('max_files_error'), 'error'); return; }
+            editFilesUnified.push(...newFiles.map(file => ({ type: 'new', data: file })));
+            displayEditFiles();
+        }
+    });
+});
+// Auto-resize textarea based on content
+const autoResize = (el) => {
+    if (!el) return;
+    el.style.height = 'auto'; // Reset height to recalculate
+    el.style.height = el.scrollHeight + 'px'; // Set new height
+};
+const textareas = ['messageInput', 'editMessageInput'];
+textareas.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+        // Resize on typing
+        el.addEventListener('input', () => autoResize(el));
     }
 });
