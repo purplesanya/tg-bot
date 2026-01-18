@@ -10,7 +10,11 @@ Base = declarative_base()
 
 # Database setup
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///telegram_scheduler.db')
-engine = create_engine(DATABASE_URL, echo=False)
+connect_args = {}
+if 'sqlite' in DATABASE_URL:
+    connect_args = {'check_same_thread': False}
+
+engine = create_engine(DATABASE_URL, echo=False, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timedelta
 from functools import wraps
 from threading import Thread
-
+from telethon.tl.types import Channel, Chat
 import pytz
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -155,7 +155,9 @@ def admin_required(f):
 
 def calculate_next_run(interval_value, interval_unit):
     now = datetime.utcnow()
-    if interval_unit == 'minutes':
+    if interval_unit == 'seconds':
+        return now + timedelta(seconds=interval_value)
+    elif interval_unit == 'minutes':
         return now + timedelta(minutes=interval_value)
     elif interval_unit == 'hours':
         return now + timedelta(hours=interval_value)
@@ -604,13 +606,41 @@ def create_or_update_task_from_request(req, user_db_id, db, task_id_to_update=No
                 final_file_paths.append(uploaded_file_paths[identifier].pop(0))
     task.file_paths = final_file_paths if final_file_paths else None
     task.schedule_type = 'repeat'
-    task.interval_value = int(req.form.get('interval_value'))
-    task.interval_unit = req.form.get('interval_unit')
+    # ... inside create_or_update_task_from_request ...
+
+    # --- UPDATED INTERVAL LOGIC ---
+    raw_unit = req.form.get('interval_unit')
+    primary_val = int(req.form.get('interval_value'))
+    secondary_val = int(req.form.get('interval_value_secondary') or 0)
+
+    # Convert everything to seconds for storage
+    total_seconds = 0
+    if raw_unit == 'minutes':
+        total_seconds = (primary_val * 60) + secondary_val
+    elif raw_unit == 'hours':
+        total_seconds = (primary_val * 3600) + (secondary_val * 60)
+    elif raw_unit == 'days':
+        total_seconds = (primary_val * 86400) + (secondary_val * 3600)
+    else:
+        # Fallback for old/weird data
+        total_seconds = primary_val
+
+    task.interval_value = total_seconds
+    task.interval_unit = 'seconds'  # We normalize everything to seconds now
+
     task.status = 'active'
     task.next_run = calculate_next_run(task.interval_value, task.interval_unit)
-    scheduler.add_job(send_scheduled_message,
-                      IntervalTrigger(**{task.interval_unit: task.interval_value}, timezone='UTC'),
-                      args=[user_db_id, task.id], id=task.id, replace_existing=True, next_run_time=task.next_run)
+
+    # Add to Scheduler using 'seconds'
+    scheduler.add_job(
+        send_scheduled_message,
+        IntervalTrigger(seconds=task.interval_value, timezone='UTC'),
+        args=[user_db_id, task.id],
+        id=task.id,
+        replace_existing=True,
+        next_run_time=task.next_run
+    )
+
     if not task_id_to_update: return task
     return None
 
@@ -717,15 +747,21 @@ def resume_task(task_id):
     task = db.query(Task).filter_by(id=task_id, user_id=user.id).first()
     if not task: return jsonify({'error': 'Task not found'}), 404
 
+    # Calculate next run
     new_next_run = calculate_next_run(task.interval_value, task.interval_unit)
+
+    # Logic to handle 'seconds' unit vs legacy units
+    trigger_args = {'seconds': task.interval_value} if task.interval_unit == 'seconds' else {
+        task.interval_unit: task.interval_value}
+
     scheduler.reschedule_job(task_id,
-                             trigger=IntervalTrigger(**{task.interval_unit: task.interval_value}, timezone='UTC'),
+                             trigger=IntervalTrigger(**trigger_args, timezone='UTC'),
                              next_run_time=new_next_run)
     scheduler.resume_job(task_id)
 
     task.status = 'active'
     task.next_run = new_next_run
-    db.commit();
+    db.commit()
     db.close()
     return jsonify({'success': True})
 
@@ -757,10 +793,16 @@ def unarchive_task(task_id):
         user = db.query(User).filter_by(telegram_id=session['user_id']).first()
         task = db.query(Task).filter_by(id=task_id, user_id=user.id).first()
         if not task: return jsonify({'error': 'Task not found'}), 404
-        task.status = 'active';
+
+        task.status = 'active'
         task.next_run = calculate_next_run(task.interval_value, task.interval_unit)
+
+        # Logic to handle 'seconds' unit vs legacy units
+        trigger_args = {'seconds': task.interval_value} if task.interval_unit == 'seconds' else {
+            task.interval_unit: task.interval_value}
+
         scheduler.add_job(send_scheduled_message,
-                          IntervalTrigger(**{task.interval_unit: task.interval_value}, timezone='UTC'),
+                          IntervalTrigger(**trigger_args, timezone='UTC'),
                           args=[user.id, task.id], id=task.id, replace_existing=True, next_run_time=task.next_run)
         db.commit()
         return jsonify({'success': True})
@@ -858,27 +900,48 @@ def get_admin_user_tasks(user_id):
 def send_scheduled_message(user_db_id: int, task_id: str):
     db = SessionLocal()
     try:
-        task = db.query(Task).filter_by(id=task_id).first()
-        if not task or task.is_running or task.status != 'active':
-            return
+        # --- FIX START: Atomic Update ---
+        # This query tries to set is_running=True ONLY if it is currently False.
+        # It returns the number of rows updated (1 if successful, 0 if already running).
+        result = db.query(Task).filter(
+            Task.id == task_id,
+            Task.is_running == False,
+            Task.status == 'active'
+        ).update({"is_running": True}, synchronize_session=False)
 
-        task.is_running = True
         db.commit()
 
+        # If result is 0, it means the task is already running or paused/archived.
+        # We stop immediately to prevent double/triple posting.
+        if result == 0:
+            return
+        # --- FIX END ---
+
+        # Re-fetch the task object now that we have locked it
+        task = db.query(Task).filter_by(id=task_id).first()
         user = db.query(User).filter_by(id=user_db_id).first()
+
         if not user or not user.session_string_encrypted:
+            # Cleanup if user invalid
             invalidate_user_session(user.telegram_id if user else 0)
             task.is_running = False
             db.commit()
             return
 
+        # Execute the sending logic
         success, s_count, f_count = run_async(send_message_async(user, task))
 
+        # Refresh state to ensure we have latest DB data
         db.refresh(task)
         db.refresh(user)
 
+        # Update next run time
         job = scheduler.get_job(task.id)
         next_run_time = job.next_run_time.replace(tzinfo=None) if job else None
+
+        # If job is missing (e.g. was deleted during run), calculate manually to prevent null error
+        if not next_run_time and task.status == 'active':
+            next_run_time = calculate_next_run(task.interval_value, task.interval_unit)
 
         task.execution_count += 1
         task.last_run = datetime.utcnow()
@@ -892,11 +955,14 @@ def send_scheduled_message(user_db_id: int, task_id: str):
     except Exception as e:
         print(f"Error executing task {task_id}: {e}")
         db.rollback()
-        db.query(Task).filter_by(id=task_id).update({"is_running": False});
-        db.commit()
+        # Ensure we unlock the task if it crashes
+        try:
+            db.query(Task).filter_by(id=task_id).update({"is_running": False})
+            db.commit()
+        except:
+            pass
     finally:
         db.close()
-
 
 async def send_message_async(user: User, task: Task):
     if not user.session_string_encrypted:
@@ -1002,34 +1068,126 @@ async def monitor_user_chats(user_db_id: int):
 
 
 async def update_user_chats(user_db_id, client, db):
-    dialogs = await client.get_dialogs()
-    final_chats = {}
+    """
+    Refreshes chats with 'Supergroup Priority' logic.
+    If a Group and Supergroup exist with the same name, the Group is treated as dead,
+    tasks are migrated to the Supergroup, and the Group is removed.
+    """
+    try:
+        dialogs = await client.get_dialogs()
+    except Exception as e:
+        print(f"Error fetching dialogs: {e}")
+        return
+
+    # 1. ORGANIZE DIALOGS BY NAME
+    # We group them to detect duplicates (Same Name = Potential Migration)
+    dialogs_by_name = {}
+
     for d in dialogs:
         if d.is_group:
-            if hasattr(d.entity,
-                       'banned_rights') and d.entity.banned_rights and d.entity.banned_rights.send_messages: continue
-            chat_type = 'supergroup' if hasattr(d.entity, 'megagroup') and d.entity.megagroup else 'group'
-            chat_info = {'original_id': d.id, 'abs_id': abs(d.id), 'name': d.name, 'type': chat_type}
-            if chat_info['abs_id'] not in final_chats or chat_info['type'] == 'supergroup':
-                final_chats[chat_info['abs_id']] = chat_info
+            # Skip banned chats
+            if hasattr(d.entity, 'banned_rights') and d.entity.banned_rights and d.entity.banned_rights.send_messages:
+                continue
 
-    db_chat_ids = {c.chat_id for c in db.query(UserChat).filter_by(user_id=user_db_id)}
-    active_original_ids = [info['original_id'] for info in final_chats.values()]
+            chat_name = d.name.strip()
 
-    for chat_info in final_chats.values():
-        if chat_info['original_id'] not in db_chat_ids:
-            db.add(UserChat(user_id=user_db_id, chat_id=chat_info['original_id'], chat_name=chat_info['name'],
-                            chat_type=chat_info['type']))
+            # Determine type
+            is_supergroup = hasattr(d.entity, 'megagroup') and d.entity.megagroup
+            chat_type = 'supergroup' if is_supergroup else 'group'
+
+            # Create a simple object for processing
+            chat_obj = {
+                'id': d.id,  # Real Telegram ID
+                'name': chat_name,
+                'type': chat_type,
+                'entity': d.entity  # Keep entity for advanced checks
+            }
+
+            if chat_name not in dialogs_by_name:
+                dialogs_by_name[chat_name] = []
+            dialogs_by_name[chat_name].append(chat_obj)
+
+    # 2. RESOLVE CONFLICTS (Supergroup vs Group)
+    final_active_chats = []
+
+    for name, chat_list in dialogs_by_name.items():
+        if len(chat_list) == 1:
+            # No conflict, just add it
+            final_active_chats.append(chat_list[0])
         else:
-            db.query(UserChat).filter_by(user_id=user_db_id, chat_id=chat_info['original_id']).update(
-                {'chat_name': chat_info['name'], 'chat_type': chat_info['type'], 'is_active': True}
-            )
+            # Conflict detected! Check for Supergroup priority.
+            supergroups = [c for c in chat_list if c['type'] == 'supergroup']
+            groups = [c for c in chat_list if c['type'] == 'group']
 
-    db.query(UserChat).filter(UserChat.user_id == user_db_id, UserChat.chat_id.notin_(active_original_ids)).update(
-        {'is_active': False}, synchronize_session=False
-    )
-    db.commit()
+            if supergroups and groups:
+                # We have both. The Supergroup wins.
+                winner = supergroups[0]
+                losers = groups  # All basic groups with this name are ghosts
 
+                print(f"⚔️ Conflict resolved for '{name}': Supergroup ({winner['id']}) wins.")
+
+                # FIX TASKS: Move any task using a Loser ID to the Winner ID
+                user_tasks = db.query(Task).filter_by(user_id=user_db_id).all()
+                tasks_dirty = False
+
+                for loser in losers:
+                    loser_id = loser['id']
+                    # Also explicit check: If the group is marked 'deactivated' or 'migrated_to'
+                    if hasattr(loser['entity'], 'migrated_to') and loser['entity'].migrated_to:
+                        print(f"   -> Confirmed migration flag on old group {loser_id}")
+
+                    # Scan tasks
+                    for task in user_tasks:
+                        current_ids = task.chat_ids if isinstance(task.chat_ids, list) else []
+                        if loser_id in current_ids:
+                            print(f"   -> 🩹 Fixing Task {task.id}: Swapping {loser_id} -> {winner['id']}")
+                            new_ids = [winner['id'] if x == loser_id else x for x in current_ids]
+                            task.chat_ids = list(set(new_ids))
+                            tasks_dirty = True
+                            db.add(task)
+
+                    # Delete the loser from DB immediately so it doesn't reappear
+                    db.query(UserChat).filter_by(user_id=user_db_id, chat_id=loser_id).delete()
+
+                if tasks_dirty:
+                    db.commit()
+
+                # Only add the winner to the active list
+                final_active_chats.append(winner)
+            else:
+                # Multiple groups or multiple supergroups with same name? Add all of them.
+                final_active_chats.extend(chat_list)
+
+    # 3. SAVE TO DATABASE
+    active_ids_list = [c['id'] for c in final_active_chats]
+
+    for chat in final_active_chats:
+        # Update or Insert
+        existing = db.query(UserChat).filter_by(user_id=user_db_id, chat_id=chat['id']).first()
+        if existing:
+            existing.chat_name = chat['name']
+            existing.chat_type = chat['type']
+            existing.is_active = True
+        else:
+            db.add(UserChat(
+                user_id=user_db_id,
+                chat_id=chat['id'],
+                chat_name=chat['name'],
+                chat_type=chat['type'],
+                is_active=True
+            ))
+
+    # 4. CLEANUP (Deactivate chats not in our final list)
+    db.query(UserChat).filter(
+        UserChat.user_id == user_db_id,
+        UserChat.chat_id.notin_(active_ids_list)
+    ).update({'is_active': False}, synchronize_session=False)
+
+    try:
+        db.commit()
+    except Exception as e:
+        print(f"Error saving chat updates: {e}")
+        db.rollback()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
